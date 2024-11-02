@@ -8,11 +8,11 @@
     <license>MIT</license>
 
     <keywords>cordova,android,toast,message,alert</keywords>
-  
+
     <engines>
         <engine name="cordova" version=">=3.0.0"/>
     </engines>
-  
+
     <js-module src="www/truetimeplugin.js" name="truetimeplugin">
         <clobbers target="window.plugins.truetimeplugin" />
     </js-module>
@@ -34,12 +34,15 @@
     </platform>
 
     <platform name="ios">
-    <config-file target="config.xml" parent="/*">
-        <feature name="TruetimePlugin">
-        <param name="ios-package" value="TruetimePlugin" />
-        </feature>
-    </config-file>
-    <source-file src="src/ios/TruetimePlugin.swift" />
+        <config-file target="config.xml" parent="/*">
+            <feature name="TruetimePlugin">
+            <param name="ios-package" value="TruetimePlugin" />
+            </feature>
+        </config-file>
+
+        <framework src="TrueTime" type="podspec" spec="~> 5.0" />
+
+        <source-file src="src/ios/TruetimePlugin.swift" />
     </platform>
 
 </plugin>
