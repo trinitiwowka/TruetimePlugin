@@ -40,8 +40,14 @@
             </feature>
         </config-file>
 
-        <framework src="TrueTime" type="podspec" spec="~> 5.0" />
-<!--        <preference name="deployment-target" value="15.0" />-->
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/"/>
+            </config>
+            <pods use-frameworks="true">
+                <pod name="TrueTime" spec="~> 5.0" />
+            </pods>
+        </podspec>
         <source-file src="src/ios/TruetimePlugin.swift" />
     </platform>
 
