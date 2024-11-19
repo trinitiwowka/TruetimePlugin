@@ -15,19 +15,19 @@ import TrueTime
         let urlString = ntpUrl ?? "pool.ntp.org"
         client.start(pool: [urlString])
 
-        client.fetchIfNeeded(completion:  { result in
+        client.fetchIfNeeded { result in
             switch result {
             case let .success(referenceTime):
-                let ntpDate = referenceTime.now()
-                let systemDate = Date()
+                let now = referenceTime.now()
+                let offset = referenceTime.timeInterval()
+                let uptimeInterval = referenceTime.uptimeInterval()
 
-                let offset = ntpDate.timeIntervalSince(systemDate)
-
-                let timestamp = ntpDate.timeIntervalSince1970 * 1000
+                let timestamp = now.timeIntervalSince1970 + offset
 
                 pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: [
                     "callback": timestamp,
-                    "offset": offset * 1000
+                    "offset": offset,
+                    "uptimeInterval": uptimeInterval
                 ])
 
                 DispatchQueue.main.async {
@@ -42,7 +42,7 @@ import TrueTime
                     self.commandDelegate.send(pluginResult, callbackId: command.callbackId)
                 }
             }
-        })
+        }
     }
 }
 
