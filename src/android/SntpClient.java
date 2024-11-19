@@ -63,6 +63,7 @@ public class SntpClient {
     private AtomicLong _cachedDeviceUptime = new AtomicLong();
     private AtomicLong _cachedSntpTime = new AtomicLong();
     private AtomicBoolean _sntpInitialized = new AtomicBoolean(false);
+    public String errorTrace;
 
     /**
      * See δ :
@@ -81,149 +82,167 @@ public class SntpClient {
         return ((response[RESPONSE_INDEX_RECEIVE_TIME] - response[RESPONSE_INDEX_ORIGINATE_TIME]) +
                 (response[RESPONSE_INDEX_TRANSMIT_TIME] - response[RESPONSE_INDEX_RESPONSE_TIME])) / 2;
     }
-    //( (T1 - T0) + (T2 - T3) )/ 2
+
     /**
      * Sends an NTP request to the given host and processes the response.
      *
      * @param ntpHost           host name of the server.
      */
-      synchronized long[] requestTime(String ntpHost,
-                                      float rootDelayMax,
-                                      float rootDispersionMax,
-                                      int serverResponseDelayMax,
-                                      int timeoutInMillis) throws IOException {
+    synchronized long[] requestTime(String ntpHost,
+        float rootDelayMax,
+        float rootDispersionMax,
+        int serverResponseDelayMax,
+        int timeoutInMillis
+    )
+        throws IOException {
 
-          DatagramSocket socket = null;
-          InetAddress address = null;
+        DatagramSocket socket = null;
 
-          try {
-              byte[] buffer = new byte[NTP_PACKET_SIZE];
+        try {
 
-              try {
-                  address = InetAddress.getByName(ntpHost);
-                  System.out.println("Host Name: " + address.getHostName());
-              } catch (Exception ex) {
-                  System.out.println(ex);
-                  throw new IOException("Unable to resolve host address: " + ntpHost);
-              }
+            byte[] buffer = new byte[NTP_PACKET_SIZE];
 
-              // Теперь переменная address доступна здесь
-              DatagramPacket request = new DatagramPacket(buffer, buffer.length, address, NTP_PORT);
-              writeVersion(buffer);
+            InetAddress address = null;
+            try {
+                address = InetAddress.getByName(ntpHost);
+                System.out.println("Host name : " + address.getHostName());
+            }
+            catch (Exception ex) {
+                errorTrace = ex.toString();
+                System.err.println(ex);
+            }
 
-              // -----------------------------------------------------------------------------------
-              // get current time and write it to the request packet
+            DatagramPacket request = new DatagramPacket(buffer, buffer.length, address, NTP_PORT);
 
-              long requestTime = System.currentTimeMillis();  // For T2
-              long requestTicks = SystemClock.elapsedRealtime();  // For T3
+            writeVersion(buffer);
 
-              // defines T2 here
-              writeTimeStamp(buffer, INDEX_TRANSMIT_TIME, requestTime);
+            // -----------------------------------------------------------------------------------
+            // get current time and write it to the request packet
 
-              socket = new DatagramSocket();
-              socket.setSoTimeout(timeoutInMillis);
-              socket.send(request);
+            long requestTime = System.currentTimeMillis();                  // For T2
+            long requestTicks = SystemClock.elapsedRealtime();             // for T3
 
-              // -----------------------------------------------------------------------------------
-              // read the response
+            // defines T2 here
+            writeTimeStamp(buffer, INDEX_TRANSMIT_TIME, requestTime);
 
-              long[] t = new long[RESPONSE_INDEX_SIZE];
-              DatagramPacket response = new DatagramPacket(buffer, buffer.length);
-              socket.receive(response);
+            socket = new DatagramSocket();
+            socket.setSoTimeout(timeoutInMillis);
+            try{
+                socket.send(request);
+            } catch (Exception e) {
+                errorTrace = e.toString();
+                System.out.println(e);
+            }
 
-              long responseTicks = SystemClock.elapsedRealtime();
-              t[RESPONSE_INDEX_RESPONSE_TICKS] = responseTicks;  // for T3
+            // -----------------------------------------------------------------------------------
+            // read the response
 
-              // -----------------------------------------------------------------------------------
-              // extract the results
+            long t[] = new long[RESPONSE_INDEX_SIZE];
+            DatagramPacket response = new DatagramPacket(buffer, buffer.length);
+            try{
+                socket.receive(response);
+            } catch (Exception e) {
+                errorTrace = e.toString();
+                System.out.println(e);
+            }
 
-              long originateTime = readTimeStamp(buffer, INDEX_ORIGINATE_TIME);  // T0
-              long receiveTime = readTimeStamp(buffer, INDEX_RECEIVE_TIME);  // T1
-              long transmitTime = readTimeStamp(buffer, INDEX_TRANSMIT_TIME);  // T2
-              long responseTime = requestTime + (responseTicks - requestTicks);  // T3
+            long responseTicks = SystemClock.elapsedRealtime();
+            t[RESPONSE_INDEX_RESPONSE_TICKS] = responseTicks;           // for T3
 
-              t[RESPONSE_INDEX_ORIGINATE_TIME] = originateTime;
-              t[RESPONSE_INDEX_RECEIVE_TIME] = receiveTime;
-              t[RESPONSE_INDEX_TRANSMIT_TIME] = transmitTime;
-              t[RESPONSE_INDEX_RESPONSE_TIME] = responseTime;
+            // -----------------------------------------------------------------------------------
+            // extract the results
+            // See here for the algorithm used:
+            // https://en.wikipedia.org/wiki/Network_Time_Protocol#Clock_synchronization_algorithm
 
-              T0 = originateTime;
-              T1 = receiveTime;
-              T2 = transmitTime;
-              T3 = responseTime;
+            //T0, T1 are a part of the response from NTP server
+            long originateTime = readTimeStamp(buffer, INDEX_ORIGINATE_TIME);     // T0
+            long receiveTime = readTimeStamp(buffer, INDEX_RECEIVE_TIME);         // T1
+            long transmitTime = readTimeStamp(buffer, INDEX_TRANSMIT_TIME);       // T2
+            long responseTime = requestTime + (responseTicks - requestTicks);       // T3
 
-              // -----------------------------------------------------------------------------------
-              // check validity of response
+            t[RESPONSE_INDEX_ORIGINATE_TIME] = originateTime;
+            t[RESPONSE_INDEX_RECEIVE_TIME] = receiveTime;
+            t[RESPONSE_INDEX_TRANSMIT_TIME] = transmitTime;
+            t[RESPONSE_INDEX_RESPONSE_TIME] = responseTime;
 
-              t[RESPONSE_INDEX_ROOT_DELAY] = read(buffer, INDEX_ROOT_DELAY);
-              double rootDelay = doubleMillis(t[RESPONSE_INDEX_ROOT_DELAY]);
-              if (rootDelay > rootDelayMax) {
-                  throw new InvalidNtpServerResponseException(
-                          "Invalid response from NTP server. %s violation. %f [actual] > %f [expected]",
-                          "root_delay",
-                          (float) rootDelay,
-                          rootDelayMax);
-              }
+            T0 = originateTime;
+            T1 = receiveTime;
+            T2 = transmitTime;
+            T3 = responseTime;
 
-              t[RESPONSE_INDEX_DISPERSION] = read(buffer, INDEX_ROOT_DISPERSION);
-              double rootDispersion = doubleMillis(t[RESPONSE_INDEX_DISPERSION]);
-              if (rootDispersion > rootDispersionMax) {
-                  throw new InvalidNtpServerResponseException(
-                          "Invalid response from NTP server. %s violation. %f [actual] > %f [expected]",
-                          "root_dispersion",
-                          (float) rootDispersion,
-                          rootDispersionMax);
-              }
+            // -----------------------------------------------------------------------------------
+            // check validity of response
 
-              final byte mode = (byte) (buffer[0] & 0x7);
-              if (mode != 4 && mode != 5) {
-                  throw new InvalidNtpServerResponseException("untrusted mode value for TrueTime: " + mode);
-              }
+            t[RESPONSE_INDEX_ROOT_DELAY] = read(buffer, INDEX_ROOT_DELAY);
+            double rootDelay = doubleMillis(t[RESPONSE_INDEX_ROOT_DELAY]);
+            if (rootDelay > rootDelayMax) {
+                throw new InvalidNtpServerResponseException(
+                    "Invalid response from NTP server. %s violation. %f [actual] > %f [expected]",
+                    "root_delay",
+                    (float) rootDelay,
+                    rootDelayMax);
+            }
 
-              final int stratum = buffer[1] & 0xff;
-              t[RESPONSE_INDEX_STRATUM] = stratum;
-              if (stratum < 1 || stratum > 15) {
-                  throw new InvalidNtpServerResponseException("untrusted stratum value for TrueTime: " + stratum);
-              }
+            t[RESPONSE_INDEX_DISPERSION] = read(buffer, INDEX_ROOT_DISPERSION);
+            double rootDispersion = doubleMillis(t[RESPONSE_INDEX_DISPERSION]);
+            if (rootDispersion > rootDispersionMax) {
+                throw new InvalidNtpServerResponseException(
+                    "Invalid response from NTP server. %s violation. %f [actual] > %f [expected]",
+                    "root_dispersion",
+                    (float) rootDispersion,
+                    rootDispersionMax);
+            }
 
-              final byte leap = (byte) ((buffer[0] >> 6) & 0x3);
-              if (leap == 3) {
-                  throw new InvalidNtpServerResponseException("unsynchronized server responded for TrueTime");
-              }
+            final byte mode = (byte) (buffer[0] & 0x7);
+            if (mode != 4 && mode != 5) {
+                throw new InvalidNtpServerResponseException("untrusted mode value for TrueTime: " + mode);
+            }
 
-              // delay = (T3 - T0) - (T2 - T1)
-              double delay = Math.abs((responseTime - originateTime) - (transmitTime - receiveTime));
-              DELAY = delay;
-              if (delay >= serverResponseDelayMax) {
-                  throw new InvalidNtpServerResponseException(
-                          "%s too large for comfort %f [actual] >= %f [expected]",
-                          "server_response_delay",
-                          (float) delay,
-                          serverResponseDelayMax);
-              }
+            final int stratum = buffer[1] & 0xff;
+            t[RESPONSE_INDEX_STRATUM] = stratum;
+            if (stratum < 1 || stratum > 15) {
+                throw new InvalidNtpServerResponseException("untrusted stratum value for TrueTime: " + stratum);
+            }
 
-              long timeElapsedSinceRequest = Math.abs(originateTime - System.currentTimeMillis());
-              if (timeElapsedSinceRequest >= 10_000) {
-                  throw new InvalidNtpServerResponseException("Request was sent more than 10 seconds back " +
-                          timeElapsedSinceRequest);
-              }
+            final byte leap = (byte) ((buffer[0] >> 6) & 0x3);
+            if (leap == 3) {
+                throw new InvalidNtpServerResponseException("unsynchronized server responded for TrueTime");
+            }
 
-              _sntpInitialized.set(true);
-              TrueLog.i(TAG, "---- SNTP successful response from " + ntpHost);
+            // delay = (T3 - T0) - (T2 - T1)
+            double delay = Math.abs((responseTime - originateTime) - (transmitTime - receiveTime));
+            DELAY = delay;
+            if (delay >= serverResponseDelayMax) {
+                throw new InvalidNtpServerResponseException(
+                    "%s too large for comfort %f [actual] >= %f [expected]",
+                    "server_response_delay",
+                    (float) delay,
+                    serverResponseDelayMax);
+            }
 
-              // -----------------------------------------------------------------------------------
-              cacheTrueTimeInfo(t);
-              return t;
+            long timeElapsedSinceRequest = Math.abs(originateTime - System.currentTimeMillis());
+            if (timeElapsedSinceRequest >= 10_000) {
+                throw new InvalidNtpServerResponseException("Request was sent more than 10 seconds back " +
+                                                            timeElapsedSinceRequest);
+            }
 
-          } catch (Exception e) {
-              TrueLog.d(TAG, "---- SNTP request failed for " + ntpHost);
-              throw e;
-          } finally {
-              if (socket != null) {
-                  socket.close();
-              }
-          }
-      }
+            _sntpInitialized.set(true);
+            TrueLog.i(TAG, "---- SNTP successful response from " + ntpHost);
+
+            // -----------------------------------------------------------------------------------
+            // TODO:
+            cacheTrueTimeInfo(t);
+            return t;
+
+        } catch (Exception e) {
+            TrueLog.d(TAG, "---- SNTP request failed for " + ntpHost);
+            throw e;
+        } finally {
+            if (socket != null) {
+                socket.close();
+            }
+        }
+    }
 
     void cacheTrueTimeInfo(long[] response) {
         _cachedSntpTime.set(sntpTime(response));
