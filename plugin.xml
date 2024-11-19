@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
         xmlns:android="http://schemas.android.com/apk/res/android"
-        id="cordova-plugin-truetimeplugin" version="0.0.1">
+        id="cordova-plugin-truetimeplugin" version="0.0.2">
     <name>TruetimePlugin</name>
 
     <description>An Android Cordova plugin that provides true time of the device</description>
@@ -36,12 +36,18 @@
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
             <feature name="TruetimePlugin">
-            <param name="ios-package" value="TruetimePlugin" />
+                <param name="ios-package" value="TruetimePlugin" />
             </feature>
         </config-file>
 
-        <framework src="TrueTime" type="podspec" spec="~> 5.0" />
-
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/"/>
+            </config>
+            <pods use-frameworks="true">
+                <pod name="TrueTime" spec="~> 5.0" />
+            </pods>
+        </podspec>
         <source-file src="src/ios/TruetimePlugin.swift" />
     </platform>
 
