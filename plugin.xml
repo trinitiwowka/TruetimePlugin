@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
         xmlns:android="http://schemas.android.com/apk/res/android"
-        id="cordova-plugin-truetimeplugin" version="0.0.1">
+        id="cordova-plugin-truetimeplugin" version="0.0.2">
     <name>TruetimePlugin</name>
 
     <description>An Android Cordova plugin that provides true time of the device</description>
     <license>MIT</license>
 
     <keywords>cordova,android,toast,message,alert</keywords>
-  
+
     <engines>
         <engine name="cordova" version=">=3.0.0"/>
     </engines>
-  
+
     <js-module src="www/truetimeplugin.js" name="truetimeplugin">
         <clobbers target="window.plugins.truetimeplugin" />
     </js-module>
@@ -34,12 +34,21 @@
     </platform>
 
     <platform name="ios">
-    <config-file target="config.xml" parent="/*">
-        <feature name="TruetimePlugin">
-        <param name="ios-package" value="TruetimePlugin" />
-        </feature>
-    </config-file>
-    <source-file src="src/ios/TruetimePlugin.swift" />
+        <config-file target="config.xml" parent="/*">
+            <feature name="TruetimePlugin">
+                <param name="ios-package" value="TruetimePlugin" />
+            </feature>
+        </config-file>
+
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/"/>
+            </config>
+            <pods use-frameworks="true">
+                <pod name="TrueTime" spec="~> 5.0" />
+            </pods>
+        </podspec>
+        <source-file src="src/ios/TruetimePlugin.swift" />
     </platform>
 
 </plugin>

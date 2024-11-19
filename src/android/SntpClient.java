@@ -159,7 +159,7 @@ public class SntpClient {
             long receiveTime = readTimeStamp(buffer, INDEX_RECEIVE_TIME);         // T1
             long transmitTime = readTimeStamp(buffer, INDEX_TRANSMIT_TIME);       // T2
             long responseTime = requestTime + (responseTicks - requestTicks);       // T3
-            
+
             t[RESPONSE_INDEX_ORIGINATE_TIME] = originateTime;
             t[RESPONSE_INDEX_RECEIVE_TIME] = receiveTime;
             t[RESPONSE_INDEX_TRANSMIT_TIME] = transmitTime;
