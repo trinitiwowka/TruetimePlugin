@@ -63,6 +63,7 @@ public class SntpClient {
     private AtomicLong _cachedDeviceUptime = new AtomicLong();
     private AtomicLong _cachedSntpTime = new AtomicLong();
     private AtomicBoolean _sntpInitialized = new AtomicBoolean(false);
+    public String errorTrace;
 
     /**
      * See δ :
@@ -81,7 +82,7 @@ public class SntpClient {
         return ((response[RESPONSE_INDEX_RECEIVE_TIME] - response[RESPONSE_INDEX_ORIGINATE_TIME]) +
                 (response[RESPONSE_INDEX_TRANSMIT_TIME] - response[RESPONSE_INDEX_RESPONSE_TIME])) / 2;
     }
-    //( (T1 - T0) + (T2 - T3) )/ 2
+
     /**
      * Sends an NTP request to the given host and processes the response.
      *
@@ -101,12 +102,15 @@ public class SntpClient {
 
             byte[] buffer = new byte[NTP_PACKET_SIZE];
 
-            try{
-                InetAddress address = InetAddress.getByName(ntpHost);
-                System.out.println("Host Name" + address.getHostName());
-            } catch (Exception ex) {  
-                System.out.println(ex);  
-            }  
+            InetAddress address = null;
+            try {
+                address = InetAddress.getByName(ntpHost);
+                System.out.println("Host name : " + address.getHostName());
+            }
+            catch (Exception ex) {
+                errorTrace = ex.toString();
+                System.err.println(ex);
+            }
 
             DatagramPacket request = new DatagramPacket(buffer, buffer.length, address, NTP_PORT);
 
@@ -123,14 +127,24 @@ public class SntpClient {
 
             socket = new DatagramSocket();
             socket.setSoTimeout(timeoutInMillis);
-            socket.send(request);
+            try{
+                socket.send(request);
+            } catch (Exception e) {
+                errorTrace = e.toString();
+                System.out.println(e);
+            }
 
             // -----------------------------------------------------------------------------------
             // read the response
 
             long t[] = new long[RESPONSE_INDEX_SIZE];
             DatagramPacket response = new DatagramPacket(buffer, buffer.length);
-            socket.receive(response);
+            try{
+                socket.receive(response);
+            } catch (Exception e) {
+                errorTrace = e.toString();
+                System.out.println(e);
+            }
 
             long responseTicks = SystemClock.elapsedRealtime();
             t[RESPONSE_INDEX_RESPONSE_TICKS] = responseTicks;           // for T3

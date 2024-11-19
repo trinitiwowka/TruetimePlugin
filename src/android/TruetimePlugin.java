@@ -26,44 +26,59 @@ public class TruetimePlugin extends CordovaPlugin {
         callbackContext.error("\"" + action + "\" is not a recognized action.");
         return false;
       }
-    
-    try {
+      cordova.getThreadPool().execute(new Runnable() {
+          public void run() {
+              callbackContext.sendPluginResult(getTimestamps(args));
+          }
+      });
 
-        //ntpUrl received from the javascript interface
-        String ntpUrl = args.getString(0);
-
-        TrueTime.build()
-                //.withSharedPreferences(SampleActivity.this)
-                .withNtpHost(ntpUrl)
-                .withLoggingEnabled(false)
-                // .withSharedPreferencesCache(App.this)
-                .withConnectionTimeout(2000)
-                .initialize();
-    } catch (IOException  | JSONException e) {
-        e.printStackTrace();
-        Log.e(TAG, "something went wrong when trying to initialize TrueTime", e);
-    }
-    
-    JSONObject options = new JSONObject();
-    try {
-        options.putOpt("callback",  TrueTime.now());            // JSONObject.putOpt
-        long[] values = TrueTime.getRawValues();
-        options.putOpt("t0",   values[0]);
-        options.putOpt("t1",   values[1]);
-        options.putOpt("t2",   values[2]);
-        options.putOpt("t3",   values[3]);
-        options.putOpt("delay",   TrueTime.getDelay());
-       
-    } catch (JSONException e) {
-        callbackContext.sendPluginResult(new PluginResult(
-                PluginResult.Status.JSON_EXCEPTION));
-        return true;
-    }
-
-      PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, options);
-      callbackContext.sendPluginResult(pluginResult);
       return true;
   }
+
+
+    private PluginResult getTimestamps(JSONArray args) {
+        TrueTime INSTANCE =TrueTime.build();
+        try {
+            if (args == null || args.length() == 0) {
+                return new PluginResult(PluginResult.Status.ERROR, "No NTP server address provided.");
+            }
+
+            String ntpHost = args.optString(0, null);
+            if (ntpHost == null || ntpHost.isEmpty()) {
+                System.out.println("Invalid ntp url, value of ntp url passed : " + ntpHost);
+                return new PluginResult(PluginResult.Status.ERROR, "Invalid NTP server address.");
+            }
+
+            Log.d(TAG, "Initializing TrueTime with NTP host: " + ntpHost);
+                    INSTANCE
+                    //.withSharedPreferences(SampleActivity.this)
+                    .withNtpHost(ntpHost)
+                    .withLoggingEnabled(false)
+                    // .withSharedPreferencesCache(App.this)
+                    .withConnectionTimeout(3000)
+                    .initialize();
+        } catch (Exception e) {
+            return new PluginResult(
+                    PluginResult.Status.INVALID_ACTION, INSTANCE.error());
+        }
+
+        JSONObject options = new JSONObject();
+        try {
+            options.putOpt("callback",  TrueTime.now());            // JSONObject.putOpt
+            long[] values = TrueTime.getRawValues();
+            options.putOpt("t0",   values[0]);
+            options.putOpt("t1",   values[1]);
+            options.putOpt("t2",   values[2]);
+            options.putOpt("t3",   values[3]);
+            options.putOpt("delay",   TrueTime.getDelay());
+
+        } catch (JSONException e) {
+            return new PluginResult(
+                    PluginResult.Status.JSON_EXCEPTION);
+        }
+
+        return new PluginResult(PluginResult.Status.OK, options);
+    }
 }
 
 class TrueTime {
@@ -94,6 +109,10 @@ class TrueTime {
         long now = cachedSntpTime + (deviceUptime - cachedDeviceUptime);
 
         return now;
+    }
+
+    public static String error() {
+       return SNTP_CLIENT.errorTrace;
     }
 
     public static boolean isInitialized() {
