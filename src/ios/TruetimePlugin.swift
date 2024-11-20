@@ -1,6 +1,8 @@
 import TrueTime
 
-@objc(TruetimePlugin) class TruetimePlugin : CDVPlugin {
+@objc(TruetimePlugin) class TruetimePlugin: CDVPlugin {
+    private var isClientStarted = false // Флаг для отслеживания состояния клиента
+
     @objc(getTime:)
     func getTime(command: CDVInvokedUrlCommand) {
         var pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR)
@@ -13,21 +15,26 @@ import TrueTime
         }
 
         let urlString = ntpUrl ?? "pool.ntp.org"
-        client.start(pool: [urlString])
 
-        client.fetchIfNeeded { result in
+        // Проверяем, был ли клиент уже запущен
+        if !isClientStarted {
+            client.start(pool: [urlString])
+            isClientStarted = true
+        }
+
+        client.fetchIfNeeded(completion: { result in
             switch result {
             case let .success(referenceTime):
-                let now = referenceTime.now()
-                let offset = referenceTime.timeInterval()
-                let uptimeInterval = referenceTime.uptimeInterval()
-
-                let timestamp = now.timeIntervalSince1970 + offset
+                let serverTime = referenceTime.now()
+                let localTime = Date()
+                let offset = serverTime.timeIntervalSince(localTime)
+                let timestamp = serverTime.millisecondsSince1970
 
                 pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: [
-                    "callback": timestamp,
+                    "timestamp": timestamp,
                     "offset": offset,
-                    "uptimeInterval": uptimeInterval
+                    "localTime": localTime.millisecondsSince1970,
+                    "serverTime": serverTime.millisecondsSince1970
                 ])
 
                 DispatchQueue.main.async {
@@ -42,7 +49,7 @@ import TrueTime
                     self.commandDelegate.send(pluginResult, callbackId: command.callbackId)
                 }
             }
-        }
+        })
     }
 }
 
