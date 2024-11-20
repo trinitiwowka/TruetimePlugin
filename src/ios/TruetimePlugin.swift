@@ -1,6 +1,8 @@
 import TrueTime
 
-@objc(TruetimePlugin) class TruetimePlugin : CDVPlugin {
+@objc(TruetimePlugin) class TruetimePlugin: CDVPlugin {
+    private var isClientStarted = false
+
     @objc(getTime:)
     func getTime(command: CDVInvokedUrlCommand) {
         var pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR)
@@ -13,21 +15,36 @@ import TrueTime
         }
 
         let urlString = ntpUrl ?? "pool.ntp.org"
-        client.start(pool: [urlString])
 
-        client.fetchIfNeeded { result in
+        // Start the NTP client if not already started
+        if !isClientStarted {
+            client.start(pool: [urlString])
+            isClientStarted = true
+        }
+
+        // Record local time before the request (T0)
+        let t0 = Date().timeIntervalSince1970 * 1000
+
+        client.fetchIfNeeded(completion: { result in
             switch result {
             case let .success(referenceTime):
-                let now = referenceTime.now()
-                let offset = referenceTime.timeInterval()
-                let uptimeInterval = referenceTime.uptimeInterval()
+                // Server time (used for T1 and T2)
+                let serverTime = referenceTime.now().timeIntervalSince1970 * 1000
 
-                let timestamp = now.timeIntervalSince1970 + offset
+                // Record local time after the response (T3)
+                let t3 = Date().timeIntervalSince1970 * 1000
 
+                // Calculate the delay
+                let delay = (t3 - t0) / 2
+
+                // Construct the result
                 pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: [
-                    "callback": timestamp,
-                    "offset": offset,
-                    "uptimeInterval": uptimeInterval
+                    "callback": serverTime,
+                    "t0": t0,
+                    "t1": serverTime,
+                    "t2": serverTime,
+                    "t3": t3,
+                    "delay": delay
                 ])
 
                 DispatchQueue.main.async {
@@ -42,16 +59,6 @@ import TrueTime
                     self.commandDelegate.send(pluginResult, callbackId: command.callbackId)
                 }
             }
-        }
-    }
-}
-
-extension Date {
-    var millisecondsSince1970: Int64 {
-        return Int64((self.timeIntervalSince1970 * 1000.0))
-    }
-
-    init(milliseconds: Int64) {
-        self = Date(timeIntervalSince1970: TimeInterval(milliseconds) / 1000)
+        })
     }
 }

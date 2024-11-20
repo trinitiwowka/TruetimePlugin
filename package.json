@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-truetimeplugin",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "An Android Cordova plugin that provides true time of the device",
   "cordova": {
     "id": "cordova-plugin-truetimeplugin",
